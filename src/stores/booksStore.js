@@ -98,6 +98,23 @@ export const useBooksStore = defineStore('books', () => {
         return book;
     };
 
+    const patchBook = (id, partialData, authors) => {
+        const book = getBook(id);
+        if (!book) return null;
+
+        Object.keys(partialData).forEach((key) => {
+            if (partialData[key] !== undefined && partialData[key] !== '') {
+                book[key] = partialData[key];
+            }
+        });
+
+        if (authors && authors.length > 0) {
+            book.authors = authors;
+        }
+
+        return book;
+    };
+
     const deleteBook = (id) => {
         const idx = books.value.findIndex((b) => b.id === id);
         if (idx >= 0) {
@@ -113,6 +130,7 @@ export const useBooksStore = defineStore('books', () => {
         getBook,
         createBook,
         updateBook,
+        patchBook,
         deleteBook,
     };
 });
