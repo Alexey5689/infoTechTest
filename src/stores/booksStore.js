@@ -1,133 +1,105 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
+import { booksApi } from '../api/booksApi';
+import { notifyNewBook } from '../services/notificationService';
+
+const emptyPagination = () => ({ total: 0, page: 1, per_page: 20, total_pages: 1 });
 
 export const useBooksStore = defineStore('books', () => {
-    const books = ref([
-        {
-            id: 1,
-            title: 'Война и мир',
-            year: 2024,
-            description: 'Эпический роман о войне 1812 года',
-            isbn: '978-0-123456-78-9',
-            cover_url: '',
-            authors: [{ id: 1, full_name: 'Лев Толстой' }],
-        },
-        {
-            id: 2,
-            title: 'Преступление и наказание',
-            year: 2023,
-            description: 'Психологический роман о морали',
-            isbn: '978-0-123456-79-0',
-            cover_url: '',
-            authors: [{ id: 2, full_name: 'Фёдор Достоевский' }],
-        },
-        {
-            id: 3,
-            title: 'Мастер и Маргарита',
-            year: 2024,
-            description: 'Роман о творчестве и любви',
-            isbn: '978-0-123456-80-6',
-            cover_url: '',
-            authors: [{ id: 3, full_name: 'Михаил Булгаков' }],
-        },
-        {
-            id: 4,
-            title: 'Анна Каренина',
-            year: 2024,
-            description: 'Роман о жизни и отношениях',
-            isbn: '978-0-123456-81-3',
-            cover_url: '',
-            authors: [{ id: 1, full_name: 'Лев Толстой' }],
-        },
-    ]);
+    const items = ref([]);
+    const pagination = ref(emptyPagination());
+    const current = ref(null);
+    const years = ref([]);
+    const loading = ref(false);
+    const error = ref('');
 
-    const getBooks = (filters = {}) => {
-        let result = [...books.value];
+    // Фильтры последней загрузки списка — чтобы обновлять список после изменений
+    let lastFilters = {};
+    // Защита от гонок: применяется только ответ на самый свежий запрос
+    let listRequestId = 0;
+    let detailRequestId = 0;
 
-        if (filters.search) {
-            result = result.filter((b) => b.title.toLowerCase().includes(filters.search.toLowerCase()));
+    const fetchBooks = async (filters = lastFilters) => {
+        lastFilters = filters;
+        const requestId = ++listRequestId;
+        loading.value = true;
+        error.value = '';
+
+        try {
+            const data = await booksApi.list(filters);
+            if (requestId !== listRequestId) return;
+            items.value = data.items;
+            pagination.value = data.pagination;
+        } catch (e) {
+            if (requestId === listRequestId) error.value = e.message;
+        } finally {
+            if (requestId === listRequestId) loading.value = false;
         }
-
-        if (filters.author_id) {
-            result = result.filter((b) => b.authors.some((a) => a.id === filters.author_id));
-        }
-
-        if (filters.year) {
-            result = result.filter((b) => b.year === filters.year);
-        }
-
-        const total = result.length;
-        const page = filters.page || 1;
-        const perPage = filters.perPage || 20;
-        const totalPages = Math.max(1, Math.ceil(total / perPage));
-
-        const startIndex = (page - 1) * perPage;
-        const items = result.slice(startIndex, startIndex + perPage);
-
-        return {
-            items,
-            pagination: {
-                total,
-                page,
-                per_page: perPage,
-                total_pages: totalPages,
-            },
-        };
     };
 
-    const getBook = (id) => books.value.find((b) => b.id === id);
-
-    const createBook = (bookData, authors) => {
-        const newBook = {
-            id: Math.max(...books.value.map((b) => b.id), 0) + 1,
-            ...bookData,
-            authors: authors,
-        };
-        books.value.push(newBook);
-        return newBook;
+    const fetchYears = async () => {
+        years.value = await booksApi.getYears();
     };
 
-    const updateBook = (id, bookData, authors) => {
-        const book = getBook(id);
-        if (book) {
-            Object.assign(book, bookData);
-            if (authors) {
-                book.authors = authors;
-            }
+    // Если книги нет, current остаётся null, а причина попадает в error
+    const fetchBook = async (id) => {
+        const requestId = ++detailRequestId;
+        current.value = null;
+        loading.value = true;
+        error.value = '';
+
+        try {
+            const book = await booksApi.get(id);
+            if (requestId === detailRequestId) current.value = book;
+        } catch (e) {
+            if (requestId === detailRequestId) error.value = e.message;
+        } finally {
+            if (requestId === detailRequestId) loading.value = false;
         }
+    };
+
+    // Создаёт книгу и уведомляет подписчиков её авторов; возвращает книгу и число отправленных SMS
+    const createBook = async (payload) => {
+        const book = await booksApi.create(payload);
+
+        let notified = 0;
+        try {
+            notified = await notifyNewBook(book);
+        } catch (e) {
+            console.error('Не удалось отправить уведомления подписчикам', e);
+        }
+
+        await fetchBooks();
+        return { book, notified };
+    };
+
+    const updateBook = async (id, payload) => {
+        const book = await booksApi.update(id, payload);
+        await fetchBooks();
         return book;
     };
 
-    const patchBook = (id, partialData, authors) => {
-        const book = getBook(id);
-        if (!book) return null;
-
-        Object.keys(partialData).forEach((key) => {
-            if (partialData[key] !== undefined && partialData[key] !== '') {
-                book[key] = partialData[key];
-            }
-        });
-
-        if (authors && authors.length > 0) {
-            book.authors = authors;
-        }
-
+    const patchBook = async (id, partialPayload) => {
+        const book = await booksApi.patch(id, partialPayload);
+        await fetchBooks();
         return book;
     };
 
-    const deleteBook = (id) => {
-        const idx = books.value.findIndex((b) => b.id === id);
-        if (idx >= 0) {
-            books.value.splice(idx, 1);
-            return true;
-        }
-        return false;
+    const deleteBook = async (id) => {
+        await booksApi.remove(id);
+        await fetchBooks();
     };
 
     return {
-        books,
-        getBooks,
-        getBook,
+        items,
+        pagination,
+        current,
+        years,
+        loading,
+        error,
+        fetchBooks,
+        fetchYears,
+        fetchBook,
         createBook,
         updateBook,
         patchBook,

@@ -16,7 +16,7 @@
                     />
                     <button
                         @click="loadReport"
-                        class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded transition"
+                        class="bg-green-500 hover:bg-green-500/70 text-white px-6 py-2 rounded transition"
                     >
                         Показать
                     </button>
@@ -68,28 +68,15 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useReportsStore } from '../stores/reportsStore';
 
 const reportsStore = useReportsStore();
+const { report: reportData, error: yearError } = storeToRefs(reportsStore);
 
 const yearInput = ref(String(new Date().getFullYear()));
-const yearError = ref('');
-const reportData = ref(null);
 
-const loadReport = () => {
-    const result = reportsStore.getTopAuthors(yearInput.value);
+const loadReport = () => reportsStore.fetchTopAuthors(yearInput.value);
 
-    if (!result.success) {
-        yearError.value = result.errors[0].message;
-        reportData.value = null;
-        return;
-    }
-
-    yearError.value = '';
-    reportData.value = result.data;
-};
-
-onMounted(() => {
-    loadReport();
-});
+onMounted(loadReport);
 </script>

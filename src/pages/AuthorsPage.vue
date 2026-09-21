@@ -35,16 +35,16 @@
                     @input="currentPage = 1"
                 />
                 <p class="text-gray-600 mt-3">
-                    Найдено: <span class="font-bold">{{ paginatedResult.pagination.total }}</span> авторов
-                    <span v-if="paginatedResult.pagination.total_pages > 1">
-                        (страница {{ paginatedResult.pagination.page }} из {{ paginatedResult.pagination.total_pages }})
+                    Найдено: <span class="font-bold">{{ pagination.total }}</span> авторов
+                    <span v-if="pagination.total_pages > 1">
+                        (страница {{ pagination.page }} из {{ pagination.total_pages }})
                     </span>
                 </p>
             </div>
 
-            <div v-if="paginatedResult.items.length > 0" class="grid md:grid-cols-4 gap-6">
+            <div v-if="authors.length > 0" class="grid md:grid-cols-4 gap-6">
                 <div
-                    v-for="author in paginatedResult.items"
+                    v-for="author in authors"
                     :key="author.id"
                     class="bg-white rounded-lg border border-gray-200 p-4"
                 >
@@ -56,12 +56,12 @@
                             {{ author.full_name }}
                         </router-link>
                         <p class="text-gray-600 text-sm mb-4">
-                            Книг: {{ authorsStore.getAuthorBooks(author.id).length }}
+                            Книг: {{ author.books_count }}
                         </p>
                         <div v-if="!authStore.isGuest" class="flex gap-2">
                             <button
                                 @click="handleEditAuthor(author)"
-                                class="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded text-sm transition"
+                                class="flex-1 bg-green-500 hover:bg-green-500/70 text-white px-3 py-2 rounded text-sm transition"
                             >
                                 Редактировать
                             </button>
@@ -105,7 +105,7 @@
 
             <Pagination
                 :currentPage="currentPage"
-                :totalPages="paginatedResult.pagination.total_pages"
+                :totalPages="pagination.total_pages"
                 @change="currentPage = $event"
             />
         </div>
@@ -113,13 +113,15 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, watch, onMounted } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useAuthStore } from '../stores/authStore';
 import { useAuthorsStore } from '../stores/authorsStore';
 import Pagination from '../components/Pagination.vue';
 
 const authStore = useAuthStore();
 const authorsStore = useAuthorsStore();
+const { items: authors, pagination } = storeToRefs(authorsStore);
 
 const searchQuery = ref('');
 const newAuthorName = ref('');
@@ -131,13 +133,16 @@ const editError = ref('');
 const currentPage = ref(1);
 const perPage = 8; // сколько авторов показываем на одной странице
 
-const paginatedResult = computed(() => {
-    return authorsStore.getAuthors({
+const loadAuthors = () =>
+    authorsStore.fetchAuthors({
         search: searchQuery.value,
         page: currentPage.value,
         perPage: perPage,
     });
-});
+
+watch([searchQuery, currentPage], loadAuthors);
+
+onMounted(loadAuthors);
 
 const validateAuthorName = (name) => {
     if (!name || !name.trim()) {
@@ -149,7 +154,7 @@ const validateAuthorName = (name) => {
     return null;
 };
 
-const handleCreateAuthor = () => {
+const handleCreateAuthor = async () => {
     const error = validateAuthorName(newAuthorName.value);
     if (error) {
         createError.value = error;
@@ -157,8 +162,12 @@ const handleCreateAuthor = () => {
     }
 
     createError.value = '';
-    authorsStore.createAuthor(newAuthorName.value.trim());
-    newAuthorName.value = '';
+    try {
+        await authorsStore.createAuthor(newAuthorName.value.trim());
+        newAuthorName.value = '';
+    } catch (e) {
+        createError.value = e.message;
+    }
 };
 
 const handleEditAuthor = (author) => {
@@ -172,21 +181,29 @@ const cancelEdit = () => {
     editError.value = '';
 };
 
-const handleSaveAuthor = (id) => {
+const handleSaveAuthor = async (id) => {
     const error = validateAuthorName(editingName.value);
     if (error) {
         editError.value = error;
         return;
     }
 
-    authorsStore.updateAuthor(id, editingName.value.trim());
-    editingId.value = null;
-    editError.value = '';
+    try {
+        await authorsStore.updateAuthor(id, editingName.value.trim());
+        editingId.value = null;
+        editError.value = '';
+    } catch (e) {
+        editError.value = e.message;
+    }
 };
 
-const handleDeleteAuthor = (id) => {
+const handleDeleteAuthor = async (id) => {
     if (confirm('Вы уверены, что хотите удалить этого автора?')) {
-        authorsStore.deleteAuthor(id);
+        try {
+            await authorsStore.deleteAuthor(id);
+        } catch (e) {
+            alert(e.message);
+        }
     }
 };
 </script>

@@ -24,21 +24,21 @@
                     </select>
                 </div>
                 <p class="text-gray-600">
-                    Найдено: <span class="font-bold">{{ paginatedResult.pagination.total }}</span> книг
-                    <span v-if="paginatedResult.pagination.total_pages > 1">
-                        (страница {{ paginatedResult.pagination.page }} из {{ paginatedResult.pagination.total_pages }})
+                    Найдено: <span class="font-bold">{{ pagination.total }}</span> книг
+                    <span v-if="pagination.total_pages > 1">
+                        (страница {{ pagination.page }} из {{ pagination.total_pages }})
                     </span>
                 </p>
             </div>
 
-            <div v-if="paginatedResult.items.length > 0" class="grid md:grid-cols-3 gap-6">
+            <div v-if="books.length > 0" class="grid md:grid-cols-3 gap-6">
                 <BookCard
-                    v-for="book in paginatedResult.items"
+                    v-for="book in books"
                     :key="book.id"
                     :book="book"
                     :isGuest="authStore.isGuest"
                     mode="catalog"
-                    @subscribe="handleSubscribe(book.authors[0].id)"
+                    @subscribe="handleSubscribe(book)"
                 />
             </div>
 
@@ -48,7 +48,7 @@
 
             <Pagination
                 :currentPage="currentPage"
-                :totalPages="paginatedResult.pagination.total_pages"
+                :totalPages="pagination.total_pages"
                 @change="currentPage = $event"
             />
 
@@ -62,7 +62,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, watch, onMounted } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useAuthStore } from '../stores/authStore';
 import { useBooksStore } from '../stores/booksStore';
 import { useSubscriptionsStore } from '../stores/subscriptionsStore';
@@ -73,6 +74,7 @@ import Pagination from '../components/Pagination.vue';
 const authStore = useAuthStore();
 const booksStore = useBooksStore();
 const subscriptionsStore = useSubscriptionsStore();
+const { items: books, pagination, years } = storeToRefs(booksStore);
 
 const searchQuery = ref('');
 const filterYear = ref('');
@@ -82,26 +84,30 @@ const selectedAuthorForSubscribe = ref(null);
 const currentPage = ref(1);
 const perPage = 6;
 
-const paginatedResult = computed(() => {
-    return booksStore.getBooks({
+const loadBooks = () =>
+    booksStore.fetchBooks({
         search: searchQuery.value,
         year: filterYear.value ? parseInt(filterYear.value) : null,
         page: currentPage.value,
         perPage: perPage,
     });
+
+watch([searchQuery, filterYear, currentPage], loadBooks);
+
+onMounted(() => {
+    loadBooks();
+    booksStore.fetchYears();
 });
 
-const years = computed(() => {
-    return [...new Set(booksStore.books.map((b) => b.year))].sort((a, b) => b - a);
-});
+const handleSubscribe = (book) => {
+    if (book.authors.length === 0) return;
 
-const handleSubscribe = (authorId) => {
-    selectedAuthorForSubscribe.value = authorId;
+    selectedAuthorForSubscribe.value = book.authors[0].id;
     showSubscribeModal.value = true;
 };
 
-const confirmSubscribe = (phone) => {
-    subscriptionsStore.subscribe(selectedAuthorForSubscribe.value, phone);
+const confirmSubscribe = async (phone) => {
+    await subscriptionsStore.subscribe(selectedAuthorForSubscribe.value, phone);
 
     alert(`Вы подписались!\nНа номер ${phone} придёт SMS, когда выйдет новая книга этого автора.`);
 

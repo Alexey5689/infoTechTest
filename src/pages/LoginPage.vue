@@ -32,7 +32,7 @@
             <button
                 @click="handleLogin"
                 :disabled="loading"
-                class="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white font-semibold py-2 rounded mb-3 transition"
+                class="w-full bg-green-500 hover:bg-green-500/70 disabled:bg-green-300 text-white font-semibold py-2 rounded mb-3 transition"
             >
                 {{ loading ? 'Загрузка...' : 'Авторизация' }}
             </button>

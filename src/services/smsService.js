@@ -1,5 +1,5 @@
 const SMSPILOT_API_URL = 'https://smspilot.ru/api.php';
-const SMSPILOT_API_KEY = 'emulator'; // тестовый ключ — без отправки
+const SMSPILOT_API_KEY = import.meta.env.VITE_SMS_PILOT_API_KEY || 'emulator'; // 'emulator' — тестовый ключ, без отправки
 
 /**
  * Отправляет SMS уведомление (имитация)

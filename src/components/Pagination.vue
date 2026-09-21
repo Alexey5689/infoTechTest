@@ -14,7 +14,7 @@
             @click="$emit('change', page)"
             class="w-10 h-10 rounded border transition"
             :class="
-                page === currentPage ? 'bg-blue-500 text-white border-blue-500' : 'border-gray-300 hover:bg-gray-100'
+                page === currentPage ? 'bg-green-500 text-white border-green-500' : 'border-gray-300 hover:bg-gray-100'
             "
         >
             {{ page }}

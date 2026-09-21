@@ -6,7 +6,7 @@
         <div v-if="!isGuest" class="flex gap-2">
             <button
                 @click="$emit('edit')"
-                class="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded text-sm transition"
+                class="flex-1 bg-green-500 hover:bg-green-500/70 text-white px-3 py-2 rounded text-sm transition"
             >
                 Редактировать
             </button>
