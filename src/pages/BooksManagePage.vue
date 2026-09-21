@@ -106,7 +106,7 @@
                         :class="getFieldError('author_ids') ? 'border-red-500' : 'border-gray-300'"
                     >
                         <label
-                            v-for="author in authorsStore.authors"
+                            v-for="author in authors"
                             :key="author.id"
                             class="flex items-center cursor-pointer"
                         >
@@ -146,7 +146,7 @@
 
             <div class="grid md:grid-cols-3 gap-6">
                 <BookCard
-                    v-for="book in booksStore.books"
+                    v-for="book in books"
                     :key="book.id"
                     :book="book"
                     mode="manage"
@@ -156,7 +156,7 @@
                 />
             </div>
 
-            <div v-if="booksStore.books.length === 0" class="text-center py-12">
+            <div v-if="books.length === 0" class="text-center py-12">
                 <p class="text-gray-500 text-lg">Нет ни одной книги. Добавьте первую!</p>
             </div>
 
@@ -171,17 +171,25 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useBooksStore } from '../stores/booksStore';
 import { useAuthorsStore } from '../stores/authorsStore';
-import { useSubscriptionsStore } from '../stores/subscriptionsStore';
-import { sendSmsNotification } from '../services/smsService';
 import BookCard from '../components/BookCard.vue';
 import QuickEditModal from '../components/QuickEditModal.vue';
 
+// Страница показывает все книги и всех авторов без пагинации
+const ALL_ITEMS = { perPage: 1000 };
+
 const booksStore = useBooksStore();
 const authorsStore = useAuthorsStore();
-const subscriptionsStore = useSubscriptionsStore();
+const { items: books } = storeToRefs(booksStore);
+const { items: authors } = storeToRefs(authorsStore);
+
+onMounted(() => {
+    booksStore.fetchBooks(ALL_ITEMS);
+    authorsStore.fetchAuthors(ALL_ITEMS);
+});
 
 const title = ref('');
 const year = ref(new Date().getFullYear());
@@ -235,26 +243,23 @@ const validateBookForm = () => {
     return newErrors.length === 0;
 };
 
-const notifySubscribers = async (book) => {
-    let notifiedCount = 0;
+const showSmsNotice = (notifiedCount) => {
+    if (notifiedCount === 0) return;
 
-    for (const author of book.authors) {
-        const subscribers = subscriptionsStore.getSubscribersForAuthor(author.id);
-
-        for (const subscriber of subscribers) {
-            const message = `Вышла новая книга "${book.title}" автора ${author.full_name}!`;
-            await sendSmsNotification(subscriber.phone, message);
-            notifiedCount++;
-        }
-    }
-
-    if (notifiedCount > 0) {
-        smsNotice.value = `📱 Отправлено SMS-уведомлений: ${notifiedCount}`;
-        setTimeout(() => {
-            smsNotice.value = '';
-        }, 5000);
-    }
+    smsNotice.value = `📱 Отправлено SMS-уведомлений: ${notifiedCount}`;
+    setTimeout(() => {
+        smsNotice.value = '';
+    }, 5000);
 };
+
+const buildBookPayload = () => ({
+    title: title.value.trim(),
+    year: parseInt(year.value),
+    description: description.value.trim(),
+    isbn: isbn.value.trim(),
+    cover_url: coverPreview.value,
+    author_ids: selectedAuthorIds.value,
+});
 
 const handleFileSelected = (event) => {
     const file = event.target.files[0];
@@ -304,22 +309,13 @@ const handleCreateBook = async () => {
         return;
     }
 
-    const authors = selectedAuthorIds.value.map((id) => authorsStore.getAuthor(id));
-
-    const newBook = booksStore.createBook(
-        {
-            title: title.value.trim(),
-            year: parseInt(year.value),
-            description: description.value.trim(),
-            isbn: isbn.value.trim(),
-            cover_url: coverPreview.value,
-        },
-        authors,
-    );
-
-    await notifySubscribers(newBook);
-
-    resetForm();
+    try {
+        const { notified } = await booksStore.createBook(buildBookPayload());
+        showSmsNotice(notified);
+        resetForm();
+    } catch (e) {
+        generalError.value = e.message;
+    }
 };
 
 const handleEditBook = (book) => {
@@ -337,7 +333,7 @@ const handleEditBook = (book) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
-const handleSaveBook = (id) => {
+const handleSaveBook = async (id) => {
     generalError.value = '';
 
     if (!validateBookForm()) {
@@ -345,26 +341,21 @@ const handleSaveBook = (id) => {
         return;
     }
 
-    const authors = selectedAuthorIds.value.map((id) => authorsStore.getAuthor(id));
-
-    booksStore.updateBook(
-        id,
-        {
-            title: title.value.trim(),
-            year: parseInt(year.value),
-            description: description.value.trim(),
-            isbn: isbn.value.trim(),
-            cover_url: coverPreview.value,
-        },
-        authors,
-    );
-
-    resetForm();
+    try {
+        await booksStore.updateBook(id, buildBookPayload());
+        resetForm();
+    } catch (e) {
+        generalError.value = e.message;
+    }
 };
 
-const handleDeleteBook = (id) => {
+const handleDeleteBook = async (id) => {
     if (confirm('Вы уверены, что хотите удалить эту книгу?')) {
-        booksStore.deleteBook(id);
+        try {
+            await booksStore.deleteBook(id);
+        } catch (e) {
+            generalError.value = e.message;
+        }
     }
 };
 
@@ -373,9 +364,14 @@ const handleOpenQuickEdit = (book) => {
     showQuickEditModal.value = true;
 };
 
-const handleQuickEditConfirm = (partialData) => {
-    booksStore.patchBook(quickEditBook.value.id, partialData);
-    showQuickEditModal.value = false;
-    quickEditBook.value = null;
+const handleQuickEditConfirm = async (partialData) => {
+    try {
+        await booksStore.patchBook(quickEditBook.value.id, partialData);
+        showQuickEditModal.value = false;
+        quickEditBook.value = null;
+    } catch (e) {
+        generalError.value = e.message;
+        showQuickEditModal.value = false;
+    }
 };
 </script>

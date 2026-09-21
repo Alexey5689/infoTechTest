@@ -1,80 +1,82 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import { useBooksStore } from './booksStore';
+import { authorsApi } from '../api/authorsApi';
+
+const emptyPagination = () => ({ total: 0, page: 1, per_page: 20, total_pages: 1 });
 
 export const useAuthorsStore = defineStore('authors', () => {
-    const authors = ref([
-        { id: 1, full_name: 'Лев Толстой' },
-        { id: 2, full_name: 'Фёдор Достоевский' },
-        { id: 3, full_name: 'Михаил Булгаков' },
-    ]);
+    const items = ref([]);
+    const pagination = ref(emptyPagination());
+    const current = ref(null);
+    const loading = ref(false);
+    const error = ref('');
 
-    const getAuthors = (filters = {}) => {
-        let result = [...authors.value];
+    // Фильтры последней загрузки списка — чтобы обновлять список после изменений
+    let lastFilters = {};
+    // Защита от гонок: применяется только ответ на самый свежий запрос
+    let listRequestId = 0;
+    let detailRequestId = 0;
 
-        if (filters.search) {
-            result = result.filter((a) => a.full_name.toLowerCase().includes(filters.search.toLowerCase()));
+    const fetchAuthors = async (filters = lastFilters) => {
+        lastFilters = filters;
+        const requestId = ++listRequestId;
+        loading.value = true;
+        error.value = '';
+
+        try {
+            const data = await authorsApi.list(filters);
+            if (requestId !== listRequestId) return;
+            items.value = data.items;
+            pagination.value = data.pagination;
+        } catch (e) {
+            if (requestId === listRequestId) error.value = e.message;
+        } finally {
+            if (requestId === listRequestId) loading.value = false;
         }
-
-        const total = result.length;
-        const page = filters.page || 1;
-        const perPage = filters.perPage || 20;
-        const totalPages = Math.max(1, Math.ceil(total / perPage));
-
-        const startIndex = (page - 1) * perPage;
-        const items = result.slice(startIndex, startIndex + perPage);
-
-        return {
-            items,
-            pagination: {
-                total,
-                page,
-                per_page: perPage,
-                total_pages: totalPages,
-            },
-        };
     };
 
-    const getAuthor = (id) => authors.value.find((a) => a.id === id);
+    // Если автора нет, current остаётся null, а причина попадает в error
+    const fetchAuthor = async (id) => {
+        const requestId = ++detailRequestId;
+        current.value = null;
+        loading.value = true;
+        error.value = '';
 
-    const getAuthorBooks = (authorId) => {
-        const booksStore = useBooksStore();
-        return booksStore.books
-            .filter((book) => book.authors.some((a) => a.id === authorId))
-            .map((book) => ({ id: book.id, title: book.title, year: book.year }));
-    };
-
-    const createAuthor = (name) => {
-        const newAuthor = {
-            id: Math.max(...authors.value.map((a) => a.id), 0) + 1,
-            full_name: name,
-        };
-        authors.value.push(newAuthor);
-        return newAuthor;
-    };
-
-    const updateAuthor = (id, name) => {
-        const author = getAuthor(id);
-        if (author) {
-            author.full_name = name;
+        try {
+            const author = await authorsApi.get(id);
+            if (requestId === detailRequestId) current.value = author;
+        } catch (e) {
+            if (requestId === detailRequestId) error.value = e.message;
+        } finally {
+            if (requestId === detailRequestId) loading.value = false;
         }
+    };
+
+    const createAuthor = async (fullName) => {
+        const author = await authorsApi.create({ full_name: fullName });
+        await fetchAuthors();
         return author;
     };
 
-    const deleteAuthor = (id) => {
-        const idx = authors.value.findIndex((a) => a.id === id);
-        if (idx >= 0) {
-            authors.value.splice(idx, 1);
-            return true;
-        }
-        return false;
+    const updateAuthor = async (id, fullName) => {
+        const author = await authorsApi.update(id, { full_name: fullName });
+        await fetchAuthors();
+        return author;
+    };
+
+    const deleteAuthor = async (id) => {
+        await authorsApi.remove(id);
+        await fetchAuthors();
     };
 
     return {
-        authors,
-        getAuthors,
-        getAuthor,
-        getAuthorBooks,
+        items,
+        pagination,
+        current,
+        loading,
+        error,
+        fetchAuthors,
+        fetchAuthor,
         createAuthor,
         updateAuthor,
         deleteAuthor,

@@ -5,12 +5,14 @@
                 Назад к авторам
             </button>
 
-            <div v-if="!author" class="bg-white rounded-lg p-8 border border-gray-200 text-center">
+            <p v-if="loading" class="text-center text-gray-500 py-12">Загрузка...</p>
+
+            <div v-else-if="!author" class="bg-white rounded-lg p-8 border border-gray-200 text-center">
                 <h1 class="text-2xl font-bold mb-2">Автор не найден</h1>
                 <p class="text-gray-500 mb-6">Автор с ID {{ route.params.id }} не существует</p>
                 <router-link
                     to="/authors"
-                    class="inline-block bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded transition"
+                    class="inline-block bg-green-500 hover:bg-green-500/70 text-white px-6 py-2 rounded transition"
                 >
                     Вернуться к авторам
                 </router-link>
@@ -60,7 +62,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/authStore';
 import { useAuthorsStore } from '../stores/authorsStore';
@@ -72,23 +75,18 @@ const router = useRouter();
 const authStore = useAuthStore();
 const authorsStore = useAuthorsStore();
 const subscriptionsStore = useSubscriptionsStore();
+const { current: author, loading } = storeToRefs(authorsStore);
 
 const showSubscribeModal = ref(false);
 
-const author = computed(() => {
-    const id = parseInt(route.params.id);
-    return authorsStore.getAuthor(id);
-});
+watch(() => route.params.id, (id) => authorsStore.fetchAuthor(parseInt(id)), { immediate: true });
 
-const authorBooks = computed(() => {
-    if (!author.value) return [];
-    return authorsStore.getAuthorBooks(author.value.id);
-});
+const authorBooks = computed(() => author.value?.books ?? []);
 
-const confirmSubscribe = (phone) => {
+const confirmSubscribe = async (phone) => {
     if (!author.value) return;
 
-    subscriptionsStore.subscribe(author.value.id, phone);
+    await subscriptionsStore.subscribe(author.value.id, phone);
 
     alert(`Вы подписались на ${author.value.full_name}!\n На номер ${phone} придёт SMS о новых книгах.`);
 

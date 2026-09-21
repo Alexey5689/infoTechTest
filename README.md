@@ -85,12 +85,17 @@ books-app/
 │   │   ├── AuthorsPage.vue
 │   │   ├── ReportsPage.vue
 │   │   └── BooksManagePage.vue
-│   ├── stores/            # Pinia stores
+│   ├── stores/            # Pinia stores: состояние и оркестрация (без данных и логики «сервера»)
 │   │   ├── authStore.js
 │   │   ├── booksStore.js
 │   │   ├── authorsStore.js
 │   │   ├── subscriptionsStore.js
 │   │   └── reportsStore.js
+│   ├── api/               # Слой доступа к данным по контракту book.yaml (сейчас поверх мок-базы)
+│   │   ├── booksApi.js, authorsApi.js, reportsApi.js, authApi.js, subscriptionsApi.js
+│   │   └── errors.js, paginate.js, serializers.js
+│   ├── services/          # SMS Pilot (эмуляция) и рассылка уведомлений подписчикам
+│   ├── mocks/             # Сиды и мок-«БД» в памяти (удаляется при подключении реального API)
 │   ├── router/
 │   │   └── index.js       # Vue Router конфиг
 │   ├── App.vue            # Главный компонент
@@ -124,7 +129,7 @@ bun run lint
 
 Когда понадобится подключить реальный бэк:
 
-1. **Обновите stores** - замените mock-запросы на реальные axios вызовы
+1. **Обновите `src/api`** - замените тела функций на реальные axios вызовы (stores и страницы менять не нужно), удалите `src/mocks`
 2. **Добавьте обработку ошибок** - для сетевых ошибок
 3. **Обновите токен** - используйте реальные JWT токены от бэка
 
@@ -178,7 +183,7 @@ const login = async (username, password) => {
 - 4 книги
 - 3 автора
 
-Данные сохраняются в **localStorage**, поэтому изменения сохраняются между сеансами.
+Книги и авторы хранятся в памяти (`src/mocks/db.js`) и сбрасываются при перезагрузке страницы. В **localStorage** сохраняются только сессия (токен) и подписки.
 
 ## 🐛 Возможные проблемы и решения
 

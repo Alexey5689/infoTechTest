@@ -5,12 +5,14 @@
                 Назад к каталогу
             </button>
 
-            <div v-if="!book" class="bg-white rounded-lg p-8 border border-gray-200 text-center">
+            <p v-if="loading" class="text-center text-gray-500 py-12">Загрузка...</p>
+
+            <div v-else-if="!book" class="bg-white rounded-lg p-8 border border-gray-200 text-center">
                 <h1 class="text-2xl font-bold mb-2">Книга не найдена</h1>
                 <p class="text-gray-500 mb-6">Книга с ID {{ route.params.id }} не существует</p>
                 <router-link
                     to="/catalog"
-                    class="inline-block bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded transition"
+                    class="inline-block bg-green-500 hover:bg-green-500/70 text-white px-6 py-2 rounded transition"
                 >
                     Вернуться в каталог
                 </router-link>
@@ -67,7 +69,7 @@
                         <router-link
                             v-else
                             to="/books-manage"
-                            class="inline-block bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded transition"
+                            class="inline-block bg-green-500 hover:bg-green-500/70 text-white px-6 py-2 rounded transition"
                         >
                             Управление книгами
                         </router-link>
@@ -85,7 +87,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, watch } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/authStore.js';
 import { useBooksStore } from '../stores/booksStore.js';
@@ -97,18 +100,16 @@ const router = useRouter();
 const authStore = useAuthStore();
 const booksStore = useBooksStore();
 const subscriptionsStore = useSubscriptionsStore();
+const { current: book, loading } = storeToRefs(booksStore);
 
 const showSubscribeModal = ref(false);
 
-const book = computed(() => {
-    const id = parseInt(route.params.id);
-    return booksStore.getBook(id);
-});
+watch(() => route.params.id, (id) => booksStore.fetchBook(parseInt(id)), { immediate: true });
 
-const confirmSubscribe = (phone) => {
+const confirmSubscribe = async (phone) => {
     if (!book.value || book.value.authors.length === 0) return;
 
-    subscriptionsStore.subscribe(book.value.authors[0].id, phone);
+    await subscriptionsStore.subscribe(book.value.authors[0].id, phone);
 
     alert(` Вы подписались!\n На номер ${phone} придёт SMS, когда выйдет новая книга этого автора.`);
 

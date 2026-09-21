@@ -17,7 +17,7 @@
                     <button
                         v-if="!authStore.isAuthenticated"
                         @click="goToLogin"
-                        class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+                        class="bg-green-500 hover:bg-green-500/70 text-white px-4 py-2 rounded"
                     >
                         Вход
                     </button>

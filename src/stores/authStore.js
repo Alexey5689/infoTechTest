@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
+import { authApi } from '../api/authApi';
 
 export const useAuthStore = defineStore('auth', () => {
     const token = ref(localStorage.getItem('token') || '');
@@ -9,16 +10,16 @@ export const useAuthStore = defineStore('auth', () => {
     const isGuest = computed(() => !isAuthenticated.value);
 
     const login = async (username, password) => {
-        if (username && password) {
-            const mockUser = { id: 1, username, role: 'user' };
-            const mockToken = 'jwt_' + Date.now();
-            token.value = mockToken;
-            user.value = mockUser;
-            localStorage.setItem('token', mockToken);
-            localStorage.setItem('user', JSON.stringify(mockUser));
+        try {
+            const session = await authApi.login({ username, password });
+            token.value = session.token;
+            user.value = session.user;
+            localStorage.setItem('token', session.token);
+            localStorage.setItem('user', JSON.stringify(session.user));
             return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
         }
-        return { success: false, error: 'Неверные учётные данные' };
     };
 
     const logout = () => {
